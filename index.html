@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snake Game</title>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: #1a1a2e;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    .game-container {
+      display: flex;
+      gap: 30px;
+      align-items: flex-start;
+    }
+    .game-area {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1 {
+      color: #eee;
+      margin-bottom: 10px;
+    }
+    #score {
+      color: #4ecca3;
+      font-size: 24px;
+      margin-bottom: 15px;
+    }
+    canvas {
+      border: 3px solid #4ecca3;
+      border-radius: 8px;
+      background: #16213e;
+    }
+    #game-over {
+      display: none;
+      position: absolute;
+      background: rgba(0, 0, 0, 0.92);
+      color: #fff;
+      padding: 30px 50px;
+      border-radius: 12px;
+      text-align: center;
+      z-index: 100;
+    }
+    #game-over h2 {
+      color: #e94560;
+      margin-bottom: 15px;
+    }
+    #game-over p {
+      margin-bottom: 15px;
+      font-size: 18px;
+    }
+    #name-input {
+      padding: 10px 15px;
+      font-size: 16px;
+      border: 2px solid #4ecca3;
+      border-radius: 6px;
+      background: #16213e;
+      color: #fff;
+      margin-bottom: 15px;
+      width: 200px;
+      text-align: center;
+    }
+    #name-input::placeholder {
+      color: #666;
+    }
+    #submit-score-btn {
+      background: #e94560;
+      color: #fff;
+      border: none;
+      padding: 12px 30px;
+      font-size: 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      margin-bottom: 10px;
+      display: block;
+      width: 100%;
+    }
+    #submit-score-btn:hover {
+      background: #d63850;
+    }
+    #submit-score-btn:disabled {
+      background: #666;
+      cursor: not-allowed;
+    }
+    #restart-btn {
+      background: #4ecca3;
+      color: #1a1a2e;
+      border: none;
+      padding: 12px 30px;
+      font-size: 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      width: 100%;
+    }
+    #restart-btn:hover {
+      background: #3db892;
+    }
+    #instructions {
+      color: #888;
+      margin-top: 15px;
+      font-size: 14px;
+    }
+    
+    /* Leaderboard */
+    .leaderboard {
+      background: #16213e;
+      border: 3px solid #4ecca3;
+      border-radius: 8px;
+      padding: 20px;
+      min-width: 220px;
+      max-height: 460px;
+    }
+    .leaderboard h2 {
+      color: #4ecca3;
+      font-size: 20px;
+      margin-bottom: 15px;
+      text-align: center;
+      border-bottom: 2px solid #4ecca3;
+      padding-bottom: 10px;
+    }
+    .leaderboard-list {
+      list-style: none;
+    }
+    .leaderboard-list li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 5px;
+      border-bottom: 1px solid #1a2744;
+      color: #ccc;
+      font-size: 14px;
+    }
+    .leaderboard-list li:last-child {
+      border-bottom: none;
+    }
+    .leaderboard-list li .rank {
+      color: #888;
+      width: 25px;
+    }
+    .leaderboard-list li .rank.gold {
+      color: #ffd700;
+    }
+    .leaderboard-list li .rank.silver {
+      color: #c0c0c0;
+    }
+    .leaderboard-list li .rank.bronze {
+      color: #cd7f32;
+    }
+    .leaderboard-list li .name {
+      flex: 1;
+      margin-left: 10px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .leaderboard-list li .points {
+      color: #4ecca3;
+      font-weight: bold;
+      margin-left: 10px;
+    }
+    .leaderboard-loading {
+      color: #888;
+      text-align: center;
+      padding: 20px;
+    }
+    .score-submitted {
+      color: #4ecca3;
+      margin-bottom: 15px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Snake Game</h1>
+  <div id="score">Score: 0</div>
+  
+  <div class="game-container">
+    <div class="game-area">
+      <canvas id="game" width="400" height="400"></canvas>
+      <p id="instructions">Use Arrow Keys or WASD to move</p>
+    </div>
+    
+    <div class="leaderboard">
+      <h2>Top 10</h2>
+      <div id="leaderboard-content">
+        <p class="leaderboard-loading">Loading...</p>
+      </div>
+    </div>
+  </div>
+  
+  <div id="game-over">
+    <h2>Game Over!</h2>
+    <p>Final Score: <span id="final-score">0</span></p>
+    <div id="score-form">
+      <input type="text" id="name-input" placeholder="Enter your name" maxlength="15">
+      <button id="submit-score-btn">Submit Score</button>
+    </div>
+    <p id="score-submitted" class="score-submitted" style="display: none;">Score submitted!</p>
+    <button id="restart-btn">Play Again</button>
+  </div>
+
+  <script>
+    // =====================================================
+    // FIREBASE CONFIGURATION
+    // Replace the values below with your Firebase config
+    // =====================================================
+    const firebaseConfig = {
+      apiKey: "AIzaSyBWdI4FIlT1HIHWYnIFQHSy620IiDprX1c",
+      authDomain: "snake-game-dfe3b.firebaseapp.com",
+      projectId: "snake-game-dfe3b",
+      storageBucket: "snake-game-dfe3b.firebasestorage.app",
+      messagingSenderId: "402038974183",
+      appId: "1:402038974183:web:0d00ea33ec7c6497d16442"
+    };
+
+    // Initialize Firebase
+    let db = null;
+    let firebaseEnabled = false;
+    
+    try {
+      if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.firestore();
+        firebaseEnabled = true;
+      }
+    } catch (e) {
+      console.log("Firebase not configured, using local storage fallback");
+    }
+
+    // =====================================================
+    // LEADERBOARD FUNCTIONS
+    // =====================================================
+    
+    async function loadLeaderboard() {
+      const content = document.getElementById('leaderboard-content');
+      
+      if (firebaseEnabled) {
+        try {
+          const snapshot = await db.collection('scores')
+            .orderBy('score', 'desc')
+            .limit(10)
+            .get();
+          
+          const scores = [];
+          snapshot.forEach(doc => scores.push(doc.data()));
+          renderLeaderboard(scores);
+        } catch (e) {
+          console.error("Error loading leaderboard:", e);
+          loadLocalLeaderboard();
+        }
+      } else {
+        loadLocalLeaderboard();
+      }
+    }
+
+    function loadLocalLeaderboard() {
+      const scores = JSON.parse(localStorage.getItem('snakeScores') || '[]');
+      scores.sort((a, b) => b.score - a.score);
+      renderLeaderboard(scores.slice(0, 10));
+    }
+
+    function renderLeaderboard(scores) {
+      const content = document.getElementById('leaderboard-content');
+      
+      if (scores.length === 0) {
+        content.innerHTML = '<p class="leaderboard-loading">No scores yet. Be the first!</p>';
+        return;
+      }
+      
+      const list = document.createElement('ul');
+      list.className = 'leaderboard-list';
+      
+      scores.forEach((entry, index) => {
+        const li = document.createElement('li');
+        let rankClass = '';
+        if (index === 0) rankClass = 'gold';
+        else if (index === 1) rankClass = 'silver';
+        else if (index === 2) rankClass = 'bronze';
+        
+        li.innerHTML = `
+          <span class="rank ${rankClass}">#${index + 1}</span>
+          <span class="name">${escapeHtml(entry.name)}</span>
+          <span class="points">${entry.score}</span>
+        `;
+        list.appendChild(li);
+      });
+      
+      content.innerHTML = '';
+      content.appendChild(list);
+    }
+
+    async function submitScore(name, scoreVal) {
+      const entry = {
+        name: name.trim() || 'Anonymous',
+        score: scoreVal,
+        date: new Date().toISOString()
+      };
+      
+      if (firebaseEnabled) {
+        await db.collection('scores').add(entry);
+      } else {
+        saveLocalScore(entry);
+      }
+      
+      await loadLeaderboard();
+    }
+
+    function saveLocalScore(entry) {
+      const scores = JSON.parse(localStorage.getItem('snakeScores') || '[]');
+      scores.push(entry);
+      scores.sort((a, b) => b.score - a.score);
+      localStorage.setItem('snakeScores', JSON.stringify(scores.slice(0, 100)));
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // =====================================================
+    // GAME CODE
+    // =====================================================
+    
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const gameOverEl = document.getElementById('game-over');
+    const finalScoreEl = document.getElementById('final-score');
+    const restartBtn = document.getElementById('restart-btn');
+    const nameInput = document.getElementById('name-input');
+    const submitScoreBtn = document.getElementById('submit-score-btn');
+    const scoreForm = document.getElementById('score-form');
+    const scoreSubmittedEl = document.getElementById('score-submitted');
+
+    const gridSize = 20;
+    const tileCount = canvas.width / gridSize;
+
+    let snake = [];
+    let food = { x: 0, y: 0 };
+    let direction = { x: 1, y: 0 };
+    let nextDirection = { x: 1, y: 0 };
+    let score = 0;
+    let gameRunning = false;
+    let gameLoop;
+    let scoreSubmitted = false;
+
+    function init() {
+      snake = [
+        { x: 5, y: 10 },
+        { x: 4, y: 10 },
+        { x: 3, y: 10 }
+      ];
+      direction = { x: 1, y: 0 };
+      nextDirection = { x: 1, y: 0 };
+      score = 0;
+      scoreSubmitted = false;
+      scoreEl.textContent = `Score: ${score}`;
+      gameOverEl.style.display = 'none';
+      scoreForm.style.display = 'block';
+      scoreSubmittedEl.style.display = 'none';
+      submitScoreBtn.disabled = false;
+      submitScoreBtn.textContent = 'Submit Score';
+      nameInput.value = localStorage.getItem('playerName') || '';
+      placeFood();
+      gameRunning = true;
+    }
+
+    function placeFood() {
+      while (true) {
+        food.x = Math.floor(Math.random() * tileCount);
+        food.y = Math.floor(Math.random() * tileCount);
+        let onSnake = snake.some(seg => seg.x === food.x && seg.y === food.y);
+        if (!onSnake) break;
+      }
+    }
+
+    function update() {
+      direction = { ...nextDirection };
+      const head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
+
+      if (head.x < 0 || head.x >= tileCount || head.y < 0 || head.y >= tileCount) {
+        gameOver();
+        return;
+      }
+
+      if (snake.some(seg => seg.x === head.x && seg.y === head.y)) {
+        gameOver();
+        return;
+      }
+
+      snake.unshift(head);
+
+      if (head.x === food.x && head.y === food.y) {
+        score += 10;
+        scoreEl.textContent = `Score: ${score}`;
+        placeFood();
+      } else {
+        snake.pop();
+      }
+    }
+
+    function draw() {
+      ctx.fillStyle = '#16213e';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.strokeStyle = '#1a2744';
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= tileCount; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * gridSize, 0);
+        ctx.lineTo(i * gridSize, canvas.height);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, i * gridSize);
+        ctx.lineTo(canvas.width, i * gridSize);
+        ctx.stroke();
+      }
+
+      snake.forEach((seg, index) => {
+        ctx.fillStyle = index === 0 ? '#4ecca3' : '#3db892';
+        ctx.fillRect(seg.x * gridSize + 1, seg.y * gridSize + 1, gridSize - 2, gridSize - 2);
+        ctx.fillStyle = '#2d9a78';
+        ctx.fillRect(seg.x * gridSize + 3, seg.y * gridSize + 3, gridSize - 6, gridSize - 6);
+      });
+
+      ctx.fillStyle = '#e94560';
+      ctx.beginPath();
+      ctx.arc(
+        food.x * gridSize + gridSize / 2,
+        food.y * gridSize + gridSize / 2,
+        gridSize / 2 - 2,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+    }
+
+    function gameOver() {
+      gameRunning = false;
+      clearInterval(gameLoop);
+      finalScoreEl.textContent = score;
+      gameOverEl.style.display = 'block';
+    }
+
+    function tick() {
+      if (!gameRunning) return;
+      update();
+      draw();
+    }
+
+    function handleKey(e) {
+      const key = e.key.toLowerCase();
+      
+      if ((key === 'arrowup' || key === 'w') && direction.y !== 1) {
+        nextDirection = { x: 0, y: -1 };
+      } else if ((key === 'arrowdown' || key === 's') && direction.y !== -1) {
+        nextDirection = { x: 0, y: 1 };
+      } else if ((key === 'arrowleft' || key === 'a') && direction.x !== 1) {
+        nextDirection = { x: -1, y: 0 };
+      } else if ((key === 'arrowright' || key === 'd') && direction.x !== -1) {
+        nextDirection = { x: 1, y: 0 };
+      }
+    }
+
+    function startGame() {
+      init();
+      draw();
+      gameLoop = setInterval(tick, 100);
+    }
+
+    // Event Listeners
+    document.addEventListener('keydown', handleKey);
+    restartBtn.addEventListener('click', startGame);
+    
+    submitScoreBtn.addEventListener('click', async () => {
+      if (scoreSubmitted || submitScoreBtn.disabled) return;
+      
+      submitScoreBtn.disabled = true;
+      submitScoreBtn.textContent = 'Submitting...';
+      
+      const name = nameInput.value.trim() || 'Anonymous';
+      localStorage.setItem('playerName', name);
+      
+      try {
+        await submitScore(name, score);
+        scoreSubmitted = true;
+        scoreForm.style.display = 'none';
+        scoreSubmittedEl.style.display = 'block';
+      } catch (e) {
+        console.error("Submit failed:", e);
+        submitScoreBtn.disabled = false;
+        submitScoreBtn.textContent = 'Retry Submit';
+      }
+    });
+
+    nameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !scoreSubmitted) {
+        submitScoreBtn.click();
+      }
+    });
+
+    // Initialize
+    loadLeaderboard();
+    startGame();
+  </script>
+</body>
+</html>
